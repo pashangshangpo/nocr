@@ -14,63 +14,41 @@ func performOcr(
     let h = Int(height)
     let bytesPerRow = w
 
-    guard let provider = CGDataProvider(data: Data(bytes: imageData, count: w * h) as CFData),
-          let cgImage = CGImage(
-              width: w,
-              height: h,
-              bitsPerComponent: 8,
-              bitsPerPixel: 8,
-              bytesPerRow: bytesPerRow,
-              space: CGColorSpaceCreateDeviceGray(),
-              bitmapInfo: CGBitmapInfo(rawValue: 0),
-              provider: provider,
-              decode: nil,
-              shouldInterpolate: false,
-              intent: .defaultIntent
-          ) else {
+    let data = Data(bytes: imageData, count: w * h)
+    guard let provider = CGDataProvider(data: data as CFData) else {
         return makeEmptyResult()
     }
 
-    let semaphore = DispatchSemaphore(value: 0)
+    let colorSpace = CGColorSpaceCreateDeviceGray()
+    let bitmapInfo = CGBitmapInfo(rawValue: 0)
+
+    guard let cgImage = CGImage(
+        width: w,
+        height: h,
+        bitsPerComponent: 8,
+        bitsPerPixel: 8,
+        bytesPerRow: bytesPerRow,
+        space: colorSpace,
+        bitmapInfo: bitmapInfo,
+        provider: provider,
+        decode: nil,
+        shouldInterpolate: false,
+        intent: .defaultIntent
+    ) else {
+        return makeEmptyResult()
+    }
+
     var resultText = ""
     var resultJson: [[String: String]] = []
     var totalConfidence: Double = 0
 
-    let request = VNRecognizeTextRequest { req, error in
-        defer { semaphore.signal() }
-
-        guard error == nil,
-              let observations = req.results as? [VNRecognizedTextObservation] else {
-            return
-        }
-
-        for obs in observations {
-            guard let candidate = obs.topCandidates(1).first else { continue }
-
-            let text = candidate.string
-            let confidence = Double(candidate.confidence)
-            let box = obs.boundingBox
-
-            resultText += text + "\n"
-            totalConfidence += confidence
-
-            resultJson.append([
-                "text": text,
-                "conf": String(confidence),
-                "left": String(box.origin.x),
-                "top": String(box.origin.y),
-                "width": String(box.size.width),
-                "height": String(box.size.height),
-            ])
-        }
-    }
+    let request = VNRecognizeTextRequest()
+    request.usesLanguageCorrection = false
+    request.recognitionLevel = VNRequestTextRecognitionLevel.accurate
 
     if #available(macOS 13.0, *) {
         request.automaticallyDetectsLanguage = true
     }
-
-    request.usesLanguageCorrection = false
-    request.recognitionLevel = .accurate
 
     if languageCount > 0, let langs = languages {
         var langArray: [String] = []
@@ -91,11 +69,38 @@ func performOcr(
         return makeEmptyResult()
     }
 
-    semaphore.wait()
+    guard let observations = request.results else {
+        return makeEmptyResult()
+    }
+
+    for obs in observations {
+        guard let candidate = obs.topCandidates(1).first else { continue }
+
+        let text: String = candidate.string
+        let confidence: Double = Double(candidate.confidence)
+        let box: CGRect = obs.boundingBox
+
+        resultText += text + "\n"
+        totalConfidence += confidence
+
+        var entry: [String: String] = [:]
+        entry["text"] = text
+        entry["conf"] = String(confidence)
+        entry["left"] = String(Double(box.origin.x))
+        entry["top"] = String(Double(box.origin.y))
+        entry["width"] = String(Double(box.size.width))
+        entry["height"] = String(Double(box.size.height))
+        resultJson.append(entry)
+    }
 
     let textC = strdup(resultText) ?? strdup("")!
-    let jsonData = (try? JSONSerialization.data(withJSONObject: resultJson)) ?? Data("[]".utf8)
-    let jsonString = String(data: jsonData, encoding: .utf8) ?? "[]"
+
+    var jsonString = "[]"
+    if let jsonData = try? JSONSerialization.data(withJSONObject: resultJson) {
+        if let s = String(data: jsonData, encoding: .utf8) {
+            jsonString = s
+        }
+    }
     let jsonC = strdup(jsonString) ?? strdup("[]")!
 
     return OcrResult(text: textC, json: jsonC, confidence: totalConfidence)
