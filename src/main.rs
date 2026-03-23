@@ -4,10 +4,9 @@ mod apple;
 #[cfg(target_os = "windows")]
 mod microsoft;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use language::Language;
-use std::io::Read;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -30,19 +29,15 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let image = if let Some(url) = &cli.url {
-        let response = ureq::get(url)
-            .call()
-            .map_err(|e| anyhow::anyhow!("Failed to fetch image from URL '{}': {}", url, e))?;
-        let mut bytes: Vec<u8> = Vec::new();
-        response
-            .into_reader()
-            .read_to_end(&mut bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to read image data: {}", e))?;
+        let bytes = minreq::get(url)
+            .send()
+            .with_context(|| format!("Failed to fetch image from URL '{}'", url))?
+            .into_bytes();
         image::load_from_memory(&bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to decode image from URL: {}", e))?
+            .context("Failed to decode image from URL")?
     } else if let Some(path) = &cli.image {
         image::open(path)
-            .map_err(|e| anyhow::anyhow!("Failed to open image '{}': {}", path.display(), e))?
+            .with_context(|| format!("Failed to open image '{}'", path.display()))?
     } else {
         return Err(anyhow::anyhow!("Either an image path or --url must be provided"));
     };
