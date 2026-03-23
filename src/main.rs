@@ -10,7 +10,7 @@ use language::Language;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "n-ocr", about = "")]
+#[command(name = "nocr", about = "")]
 struct Cli {
     #[arg(help = "")]
     image: PathBuf,

@@ -24,13 +24,13 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Rename binary
-        run: cp target/${{ matrix.target }}/release/n-ocr n-ocr-${{ matrix.target }}
+        run: cp target/${{ matrix.target }}/release/nocr nocr-${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: n-ocr-${{ matrix.target }}
-          path: n-ocr-${{ matrix.target }}
+          name: nocr-${{ matrix.target }}
+          path: nocr-${{ matrix.target }}
 
   build-windows:
     runs-on: windows-latest
@@ -45,10 +45,10 @@ jobs:
 
       - name: Rename binary
         shell: pwsh
-        run: Copy-Item "target/release/n-ocr.exe" "n-ocr-x86_64-windows.exe"
+        run: Copy-Item "target/release/nocr.exe" "nocr-x86_64-windows.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: n-ocr-x86_64-windows
-          path: n-ocr-x86_64-windows.exe
+          name: nocr-x86_64-windows
+          path: nocr-x86_64-windows.exe
